@@ -1,0 +1,5 @@
+peewee==3.6.4
+pip==10.0.1
+pyTelegramBotAPI==3.6.5
+py-postgresql==1.2.1
+psycopg2==2.7.5

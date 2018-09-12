@@ -12,7 +12,7 @@ from peewee import *
 
 apihelper.proxy = cfg.proxy
 password4auth = cfg.password4auth
-team_game_interval = 5 # Время в минутах, которое должно пройти команды для опр-ой КП
+team_game_interval = 10 # Время в минутах, которое должно пройти команды для опр-ой КП
 deny_message = 'Упс. Ты кто? Я тебя не пускаю.'
 
 
