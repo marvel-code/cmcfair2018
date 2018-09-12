@@ -17,7 +17,7 @@ team_game_interval = 5 # Время в минутах, которое должн
 # DATA
 
 
-current_game_id = 0 # TODO: привязать к id чата
+chats_games_ids = {}
 
 games_count = 19
 games_names = {
@@ -57,6 +57,23 @@ class Team(Model):
 bot = telebot.TeleBot(cfg.token)
 
 
+def get_current_game_id(chat_id):
+	current_game_id = 0
+	try:
+		current_game_id = chats_games_ids[chat_id]
+	except:
+		pass
+
+	return current_game_id
+
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+	msg = 'Приветствуем на Ярмарке ВМК 2018!\nЧтобы узнать функции бота, наберите команду /help\n'
+
+	bot.send_message(message.chat.id, msg)
+
+
 @bot.message_handler(commands=['help'])
 def send_manual(message):
 	msg = 'Руководоство по боту:\n'
@@ -83,10 +100,11 @@ def send_games_list(message):
 def set_game(message):
 	msg = ''
 
-	global current_game_id
+	global chats_games_ids
 	try:
-		current_game_id = int(re.findall(r'\d+', message.text)[0])
-		msg = 'Вы выбрали игру №{} \'{}\''.format(current_game_id, games_names[current_game_id])
+		game_id = int(re.findall(r'\d+', message.text)[0])
+		chats_games_ids.update({message.chat.id: game_id})
+		msg = 'Вы выбрали игру №{} \'{}\''.format(game_id, games_names[game_id])
 
 	except Exception as ex:
 		msg = 'Ошибочка :-('
@@ -95,15 +113,39 @@ def set_game(message):
 	bot.send_message(message.chat.id, msg)
 
 
+@bot.message_handler(commands=['game_stat'])
+def send_game_stat(message):
+	current_game_id = get_current_game_id(message.chat.id)
+
+	if current_game_id == 0:
+		bot.send_message(message.chat.id, 'Выберите игру через /select_game <id>')
+		return
+
+	msg = 'Статистика по игре №{} \'{}\':\n'.format(current_game_id, games_names[current_game_id])
+	teams = Team.select()
+	for t in teams:
+		team_data = t.data.split(';')
+		if len(team_data) < games_count:
+			team_data = ('0,0' + ';0,0' * (games_count - 1)).split(';')
+		game_data = team_data[current_game_id - 1].split(',') # [0] score [1] last_time
+		score = int(game_data[0])
+		team_delta = time.time() - float(game_data[1])
+
+		msg += '\n{} — {}. Ждать {}мин {}с'.format(t.number, score, int(team_game_interval - team_delta / 60) if team_delta < team_game_interval * 60 else 0, 60 - int(team_delta % 60)  if team_delta < team_game_interval * 60 else 0)
+
+	bot.send_message(message.chat.id, msg)
+
 
 
 @bot.message_handler(regexp='^\d+ +\d+ *\d?$')
 def process_game(message):
 	msg = ''
 
-	global current_game_id
+	global chats_games_ids
+	current_game_id = get_current_game_id(message.chat.id)
+
 	if current_game_id == 0:
-		msg = 'Вы не назначили игру. Наберите следующую команду:\n/set_game id'
+		msg = 'Вы не назначили игру. Наберите следующую команду:\n/select_game id'
 
 	else:
 		args = re.findall(r'\w+', message.text)
@@ -128,28 +170,36 @@ def process_game(message):
 				# Check for time rule
 				if team_delta / 60 < team_game_interval and not is_forcibly:
 					msg += 'Прошло мало времени. Осталось {}мин {}с'.format(int(team_game_interval - team_delta / 60), 60 - int(team_delta % 60))
+					new_score = old_score
+
 				else:
 					if old_score >= new_score and not is_forcibly:
 						if old_score == new_score:
 							msg = 'Ничего не изменилось.'
 						else:
 							msg = 'В этот раз похуже. Старайтесь лучше!'
+							new_score = old_score
 
 					elif new_score > 10 and not is_forcibly:
 						msg = 'Счёт не может быть больше 10'
+						new_score = old_score
 
 					else:
 						msg = 'Поздравляем, счёт увеличился!'
-						# Update team score for this game
 						if is_forcibly:
 							msg = 'Принудительное изменение счёта.'
-						game_data[0] = str(new_score)
-						game_data[1] = str(int(time.time()))
-						team_data[current_game_id - 1] = ','.join(game_data)
-						t.data = ';'.join(team_data)
-						t.save()
 
-				msg += '\n\nСчёт {} команды равен {}'.format(team_id, game_data[0])
+					# Update team score and time for this game
+					game_data[0] = str(new_score)
+					game_data[1] = str(int(time.time()))
+					team_data[current_game_id - 1] = ','.join(game_data)
+					t.data = ';'.join(team_data)
+					t.save()
+
+				if new_score != old_score:
+					msg += '\n\nСчёт {} команды поменялся с {} на {}'.format(team_id, old_score, new_score)
+				else:
+					msg += '\n\nСчёт {} команды остался равен {}'.format(team_id, old_score)
 
 		except IndexError as ex:
 			msg = 'Ошибочка :-('
