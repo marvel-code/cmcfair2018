@@ -12,12 +12,15 @@ from peewee import *
 
 apihelper.proxy = cfg.proxy
 team_game_interval = 5 # Время в минутах, которое должно пройти команды для опр-ой КП
+deny_message = 'Упс. Ты кто? Я тебя не пускаю.'
+password4auth = 'Profcom_VMK_2018'
 
 
 # DATA
 
 
 chats_games_ids = {}
+authed = {}
 
 games_count = 19
 games_names = {
@@ -66,6 +69,8 @@ def get_current_game_id(chat_id):
 
 	return current_game_id
 
+def extract_arg(arg):
+	return arg.split()[1:]
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -74,13 +79,35 @@ def send_welcome(message):
 	bot.send_message(message.chat.id, msg)
 
 
+@bot.message_handler(commands=['auth'])
+def auth(message):
+	msg = ''
+
+	password = extract_arg(message.text)[0]
+	global password4auth
+	result = password == password4auth
+	authed.update({message.chat.id: result})
+
+	if result:
+		msg = 'Главное, никого не обижай :) Удачи!'
+	else:
+		msg = deny_message
+
+	bot.send_message(message.chat.id, msg)
+
+
 @bot.message_handler(commands=['help'])
 def send_manual(message):
-	msg = 'Руководоство по боту:\n'
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
 
-	msg += '\n/games_list — список доступных игр'
-	msg += '\n/select_game <id> — выбрать игру'
-	msg += '\n<team> <score> [f] — назначить `score` очков для команды `team`. \
+	msg = 'Руководоство по боту:'
+
+	msg += '\n\n/games_list — список доступных игр'
+	msg += '\n\n/select_game <id> — выбрать игру'
+	msg += '\n\n/game_stat — статистика текущей игры'
+	msg += '\n\n<team> <score> [f] — назначить `score` очков для команды `team`. \
 	Если f==1, то назначить принудительно'
 
 	bot.send_message(message.chat.id, msg)
@@ -88,6 +115,10 @@ def send_manual(message):
 
 @bot.message_handler(commands=['games_list'])
 def send_games_list(message):
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
+
 	msg = 'Список игр:\n\n'
 
 	for i in range(1, games_count + 1):
@@ -98,6 +129,10 @@ def send_games_list(message):
 
 @bot.message_handler(commands=['select_game'])
 def set_game(message):
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
+
 	msg = ''
 
 	global chats_games_ids
@@ -115,6 +150,10 @@ def set_game(message):
 
 @bot.message_handler(commands=['game_stat'])
 def send_game_stat(message):
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
+
 	current_game_id = get_current_game_id(message.chat.id)
 
 	if current_game_id == 0:
@@ -139,13 +178,17 @@ def send_game_stat(message):
 
 @bot.message_handler(regexp='^\d+ +\d+ *\d?$')
 def process_game(message):
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
+
 	msg = ''
 
 	global chats_games_ids
 	current_game_id = get_current_game_id(message.chat.id)
 
 	if current_game_id == 0:
-		msg = 'Вы не назначили игру. Наберите следующую команду:\n/select_game id'
+		msg = 'Вы не назначили игру. Список игр: /games_list. Выбрать игру:\n/select_game id'
 
 	else:
 		args = re.findall(r'\w+', message.text)
