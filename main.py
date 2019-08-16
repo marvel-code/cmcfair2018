@@ -10,10 +10,11 @@ from peewee import *
 # SETTINGS
 
 
-apihelper.proxy = cfg.proxy
+#apihelper.proxy = cfg.proxy
 password4auth = cfg.password4auth
-team_game_interval = 10 # Время в минутах, которое должно пройти команды для определённой КП
+team_game_interval = 10 # Время в минутах, которое должно пройти команды для опр-ой КП
 deny_message = 'Упс. Ты кто? Я тебя не пускаю.'
+
 
 
 # DATA
@@ -24,31 +25,32 @@ authed = {}
 
 games_count = 19
 games_names = {
-	1: 'Наступательное движение',
-	2: 'kp2',
-	3: 'kp3',
-	4: 'kp4',
-	5: 'kp5',
-	6: 'kp6',
-	7: 'kp7',
-	8: 'kp8',
-	9: 'kp9',
-	10: 'kp10',
-	11: 'kp11',
-	12: 'kp12',
-	13: 'kp13',
-	14: 'kp14',
-	15: 'kp15',
-	16: 'kp16',
-	17: 'kp17',
-	18: 'kp18',
-	19: 'kp19',
+	1: 'База',
+	2: 'Game зона',
+	3: 'Гусеница',
+	4: 'Руки из ножниц',
+	5: 'Банк',
+	6: 'Стоп Земля',
+	7: 'Лента Мёбиуса',
+	8: 'Вы в танцах!',
+	9: 'Наступаем',
+	10: 'По тележкам',
+	11: 'Ну-ка, мечи стаканы',
+	12: 'Йога',
+	13: 'Чехaрда',
+	14: 'Поиск сокровищ',
+	15: 'Яблоко раздора',
+	16: 'Твистер',
+	17: 'Связь пропала!',
+	18: 'Пески',
+	19: 'На стиле',
 }
 
 db = SqliteDatabase('teams.db')
 class Team(Model):
     number = IntegerField(3, primary_key=True, unique=True)
     data = CharField(512)
+    outcome = IntegerField(5)
 
     class Meta:
         database = db
@@ -82,8 +84,13 @@ def send_welcome(message):
 @bot.message_handler(commands=['auth'])
 def auth(message):
 	msg = ''
+	password = ''
 
-	password = extract_arg(message.text)[0]
+	try:
+		password = extract_arg(message.text)[0]
+	except:
+		pass
+
 	global password4auth
 	result = password == password4auth
 	authed.update({message.chat.id: result})
@@ -176,6 +183,34 @@ def send_game_stat(message):
 
 
 
+@bot.message_handler(commands=['gts']) # get_team_score
+def send_team_score(message):
+	msg = ''
+	try:
+		for t in Team.select():
+			# Get team data for this game
+			team_data = t.data.split(';')
+			if len(team_data) < games_count:
+				team_data = ('0,0' + ';0,0' * (games_count - 1)).split(';')
+
+			sum_score = 0
+			for i in range(0, games_count):
+				sum_score += int(team_data[i].split(',')[0]) # [0] score [1] last_time
+
+			sum_score -= t.outcome
+
+			msg += '\nКоманда {} имеет {} очков с учётом потраченых {} денег'.format(t.number, sum_score, t.outcome)
+
+
+	except Exception as ex:
+		msg = 'Ошибка :( Попробуйте снова или напишите админу @m9y_yosya\n' + str(ex)
+
+	bot.send_message(message.chat.id, msg)
+
+
+
+
+
 @bot.message_handler(regexp='^\d+ +\d+ *\d?$')
 def process_game(message):
 	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
@@ -191,12 +226,12 @@ def process_game(message):
 		msg = 'Вы не назначили игру. Список игр: /games_list. Выбрать игру:\n/select_game id'
 
 	else:
-		args = re.findall(r'\w+', message.text)
-		team_id = int(args[0])
-		new_score = int(args[1])
-		is_forcibly = len(args) > 2 and int(args[2]) == 1
-
 		try:
+			args = re.findall(r'\w+', message.text)
+			team_id = int(args[0])
+			new_score = int(args[1])
+			is_forcibly = len(args) > 2 and int(args[2]) == 1
+
 			t = Team.get(Team.number == team_id)
 			if not t:
 				msg = 'Неправильный номер команды'
@@ -247,6 +282,77 @@ def process_game(message):
 		except IndexError as ex:
 			msg = 'Ошибочка :-('
 			print(ex)
+
+
+	bot.send_message(message.chat.id, msg)
+
+
+
+@bot.message_handler(commands=['setteamsforfair'])
+def set_teams(message):
+	msg = 'set teams processed'
+
+	try:
+		try:
+			for t in Team.select():
+				t.delete_instance()
+		except Exception as e:
+			print(e)
+			pass
+		Team.drop_table()
+		Team.create_table()
+
+	except Exception as e:
+		print(e)
+		Team.create_table()
+
+
+	try:
+		teams_list = extract_arg(message.text)
+
+		for t in teams_list:
+			nt = Team.create(number=int(t), data=('0,0' + ';0,0' * (games_count - 1)), outcome=0)
+			nt.save()
+	except:
+		pass
+
+
+	bot.send_message(message.chat.id, msg)
+
+@bot.message_handler(commands=['delete_all_teams_4_fair'])
+def delete_all_teams(message):
+	msg = 'Приветствуем на Ярмарке ВМК 2018!\nЧтобы узнать функции бота, наберите команду /help\n'
+
+	try:
+		for t in Team.select():
+			t.delete_instance()
+	except Exception as e:
+		print(e)
+		pass
+
+
+	bot.send_message(message.chat.id, msg)
+
+
+@bot.message_handler(commands=['team_trade'])
+def team_trade(message):
+
+	if list(authed.keys()).count(message.chat.id) == 0 or not authed[message.chat.id]:
+		bot.send_message(message.chat.id, deny_message)
+		return
+
+	try:
+		data = extract_arg(message.text)
+		t = Team.get(number=int(data[0]))
+		t.outcome += int(data[1])
+		t.save()
+
+		msg = 'Команда потратила {} очков. Её расходы равны {}'.format(data[1], t.outcome)
+
+	except Exception as e:
+		print(e)
+		msg = 'Ошибка :_( Обратитесь к m9y_yosya'
+
 
 
 	bot.send_message(message.chat.id, msg)

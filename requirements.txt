@@ -1,0 +1,16 @@
+PySocks==1.6.8
+certifi==2018.4.16
+chardet==3.0.4
+future==0.16.0
+gunicorn==19.9.0
+idna==2.7
+peewee==3.6.4
+pip==10.0.1
+pyTelegramBotAPI==3.6.5
+python-telegram-bot==10.1.0
+requests==2.10.0
+setuptools==39.1.0
+six==1.11.0
+urllib3==1.23
+py-postgresql==1.2.1
+psycopg2==2.7.5
